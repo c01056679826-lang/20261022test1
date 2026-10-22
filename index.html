@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>더치페이 계산기</title>
+<style>
+:root{--navy:#17324d;--blue:#2864dc;--pale:#eef4ff;--ink:#203047;--muted:#68778b;--line:#dce4ef;--green:#16794b}
+*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:var(--ink);font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;line-height:1.5}
+main{max-width:620px;margin:0 auto;padding:24px 16px 40px}.hero{background:linear-gradient(135deg,#17324d,#2864dc);color:white;padding:25px 22px;border-radius:22px;margin-bottom:18px}.hero h1{margin:0 0 7px;font-size:28px}.hero p{margin:0;opacity:.9}
+.panel{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 5px 18px #2030470a}
+h2{font-size:18px;margin:0 0 14px}.field{display:block;font-weight:700;margin:12px 0 6px}input{font:inherit;width:100%;padding:13px 14px;border:1px solid #b9c7d9;border-radius:11px;background:#fff;color:var(--ink)}input:focus,button:focus-visible{outline:3px solid #a9c6ff;outline-offset:2px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.hint{font-size:13px;color:var(--muted);margin:7px 0 0}
+button{font:inherit;font-weight:750;border:0;border-radius:12px;padding:13px 16px;cursor:pointer}.primary{background:var(--blue);color:#fff;width:100%;margin-top:16px}.secondary{background:var(--pale);color:var(--blue)}.danger{background:#fff0f0;color:#a52b2b;padding:8px 12px}
+.result{background:#eef8f2;border:1px solid #c7e7d3;border-radius:15px;padding:18px;margin-top:16px}.result .amount{font-size:32px;font-weight:850;color:var(--green);letter-spacing:-.5px}.result p{margin:3px 0}.hidden{display:none}.people-head,.person{display:grid;grid-template-columns:1fr 110px;gap:10px;align-items:center}.people-head{font-size:13px;color:var(--muted);padding-bottom:6px}.person{margin:8px 0}.person input{min-width:0}.person input[type=number]{text-align:right}.person button{white-space:nowrap}
+#peopleList{margin-top:10px}.error{color:#b42318;font-weight:650;margin-top:10px}.split-line{border-top:1px dashed #c8d5e5;margin:13px 0}
+@media(max-width:390px){main{padding:14px 11px 28px}.hero{padding:21px 17px}.hero h1{font-size:25px}.panel{padding:16px}.row{grid-template-columns:1fr}.people-head,.person{grid-template-columns:1fr 92px;gap:7px}}
+</style>
+</head>
+<body>
+<main>
+<header class="hero"><h1>🧾 더치페이 계산기</h1><p>함께 쓴 비용을 간편하고 공평하게 나눠 보세요.</p></header>
+<section class="panel">
+<h2>1. 총 비용과 인원 입력</h2>
+<label class="field" for="total">총 결제 금액 (원)</label>
+<input id="total" type="number" min="0" step="1" inputmode="numeric" placeholder="예: 85000">
+<div class="row">
+<div><label class="field" for="count">인원수</label><input id="count" type="number" min="1" max="100" step="1" value="4" inputmode="numeric"></div>
+<div><label class="field" for="rounding">정산 단위</label><select id="rounding" style="font:inherit;width:100%;padding:13px;border:1px solid #b9c7d9;border-radius:11px;background:white"><option value="1">1원 단위</option><option value="10">10원 단위</option><option value="100" selected>100원 단위</option><option value="1000">1,000원 단위</option></select></div>
+</div>
+<p class="hint">정산 단위를 선택하면 나머지 금액은 마지막 사람에게 자동 배분합니다.</p>
+<button class="secondary" id="makePeople" type="button" style="width:100%;margin-top:12px">인원수만큼 이름 입력칸 만들기</button>
+</section>
+<section class="panel">
+<h2>2. 참석자별 분담 설정</h2>
+<div class="people-head"><span>이름</span><span>분담 가중치</span></div>
+<div id="peopleList"></div>
+<p class="hint">모두 똑같이 나누려면 가중치를 1로 두세요. 2는 다른 사람의 두 배를 부담한다는 뜻입니다.</p>
+<button class="secondary" id="addPerson" type="button" style="width:100%;margin-top:12px">＋ 참석자 추가</button>
+</section>
+<section class="panel">
+<h2>3. 정산 결과</h2>
+<button class="primary" id="calculate" type="button">얼마씩 낼지 계산하기</button>
+<div id="error" class="error" role="alert" aria-live="polite"></div>
+<div id="result" class="result hidden" aria-live="polite"></div>
+<button id="copy" class="secondary hidden" type="button" style="width:100%;margin-top:12px">결과 복사하기</button>
+</section>
+<p class="hint" style="text-align:center">입력한 정보는 이 브라우저 안에서만 계산하며 서버로 전송하지 않습니다.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const money=n=>Math.round(n).toLocaleString('ko-KR')+'원';
+function addPerson(name='참석자 '+($('peopleList').children.length+1),weight='1'){
+ const row=document.createElement('div');row.className='person';
+ const nm=document.createElement('input');nm.type='text';nm.maxLength=30;nm.placeholder='이름';nm.value=name;nm.setAttribute('aria-label','참석자 이름');
+ const right=document.createElement('div');right.style.display='flex';right.style.gap='5px';right.style.alignItems='center';
+ const wt=document.createElement('input');wt.type='number';wt.min='0.01';wt.max='100';wt.step='0.1';wt.value=weight;wt.inputMode='decimal';wt.setAttribute('aria-label',name+' 분담 가중치');
+ const del=document.createElement('button');del.type='button';del.className='danger';del.textContent='삭제';del.setAttribute('aria-label',name+' 삭제');del.onclick=()=>{row.remove();renumber();$('result').classList.add('hidden')};
+ right.append(wt,del);row.append(nm,right);$('peopleList').append(row);
+ nm.addEventListener('input',()=>{wt.setAttribute('aria-label',(nm.value||'참석자')+' 분담 가중치');del.setAttribute('aria-label',(nm.value||'참석자')+' 삭제')});
+}
+function renumber(){[...$('peopleList').children].forEach((row,i)=>{const nm=row.querySelector('input[type=text]');if(!nm.value.trim())nm.placeholder='참석자 '+(i+1)})}
+function makePeople(){let n=Number($('count').value);if(!Number.isInteger(n)||n<1||n>100){showError('인원수는 1명부터 100명까지 입력해 주세요.');return}const old=[...$('peopleList').children].map(r=>({name:r.querySelector('input[type=text]').value,weight:r.querySelector('input[type=number]').value}));$('peopleList').replaceChildren();for(let i=0;i<n;i++)addPerson(old[i]?.name||'참석자 '+(i+1),old[i]?.weight||'1');$('count').value=n;$('error').textContent='';$('result').classList.add('hidden')}
+function showError(msg){$('error').textContent=msg;$('result').classList.add('hidden');$('copy').classList.add('hidden')}
+function calculate(){
+ const total=Number($('total').value),rows=[...$('peopleList').children],unit=Number($('rounding').value);
+ if($('total').value.trim()===''||!Number.isSafeInteger(total)||total<0){showError('총 금액은 0원 이상의 정수로 입력해 주세요.');return}
+ if(!rows.length){showError('참석자를 한 명 이상 추가해 주세요.');return}
+ const people=rows.map((r,i)=>({name:r.querySelector('input[type=text]').value.trim()||'참석자 '+(i+1),weight:Number(r.querySelector('input[type=number]').value)}));
+ if(people.some(p=>!Number.isFinite(p.weight)||p.weight<=0)){showError('모든 참석자의 분담 가중치는 0보다 큰 숫자여야 합니다.');return}
+ const sum=people.reduce((s,p)=>s+p.weight,0);let used=0;
+ const shares=people.map((p,i)=>{let amount;if(i===people.length-1)amount=total-used;else{amount=Math.floor((total*p.weight/sum)/unit)*unit;used+=amount}return {...p,amount}});
+ const html=shares.map(p=>'<p><strong>'+escapeHtml(p.name)+'</strong> · '+money(p.amount)+'</p>').join('');
+ $('result').innerHTML='<div>총 결제 금액</div><div class="amount">'+money(total)+'</div><div class="split-line"></div>'+html+'<div class="split-line"></div><p>총 '+people.length+'명 · 분담 합계 '+money(shares.reduce((s,p)=>s+p.amount,0))+'</p><p class="hint">반올림으로 생기는 차액은 마지막 참석자에게 반영했습니다.</p>';
+ $('result').classList.remove('hidden');$('copy').classList.remove('hidden');$('error').textContent='';
+ window.lastSplit='[더치페이 정산 결과]\n총 금액: '+money(total)+'\n'+shares.map(p=>p.name+': '+money(p.amount)).join('\n')+'\n합계: '+money(shares.reduce((s,p)=>s+p.amount,0));
+}
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+$('makePeople').addEventListener('click',makePeople);
+$('addPerson').addEventListener('click',()=>{if($('peopleList').children.length>=100){showError('참석자는 최대 100명까지 추가할 수 있습니다.');return}addPerson();$('count').value=$('peopleList').children.length;$('error').textContent=''});
+$('calculate').addEventListener('click',calculate);
+$('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(window.lastSplit);$('copy').textContent='복사했어요!';setTimeout(()=>$('copy').textContent='결과 복사하기',1800)}catch(e){const ta=document.createElement('textarea');ta.value=window.lastSplit;document.body.append(ta);ta.select();try{document.execCommand('copy');$('copy').textContent='복사했어요!'}catch(_){showError('복사할 수 없습니다. 결과를 선택해 복사해 주세요.')}ta.remove()}});
+makePeople();
+</script>
+</body>
+</html>
